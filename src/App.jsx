@@ -834,7 +834,7 @@ export default function App() {
           saving ? "Saving..." : "Ready",
           new Date().toLocaleDateString(),
         ]}
-        style={{ maxWidth: 960, margin: "0 auto" }}
+        style={{ margin: "0 auto" }}
       >
         {/* Menu bar */}
         <div style={{ background: W.surface, padding: "1px 2px", marginBottom: 2, display: "flex", gap: 0, borderBottom: `1px solid ${W.btnShad}` }}>
@@ -858,7 +858,7 @@ export default function App() {
         </div>
 
         {/* Content area */}
-        <div style={{ ...sunken, background: W.white, padding: 8, minHeight: 460 }}>
+        <div style={{ ...sunken, background: W.white, padding: 8, minHeight: "calc(100vh - 140px)" }}>
           {tab === "import" && <ImportTab transactions={txns} setTransactions={setTxns} onSave={doSave} />}
           {tab === "review" && <ReviewTab transactions={txns} setTransactions={setTxns} onSave={doSave} />}
           {tab === "dashboard" && <DashboardTab transactions={txns} />}
