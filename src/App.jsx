@@ -58,12 +58,12 @@ const field = {
 
 function Win95Window({ title, children, style: s, statusBar }) {
   return (
-    <div style={{ background: W.surface, ...raised, padding: 3, ...s }}>
+    <div style={{ background: W.surface, ...raised, padding: 3, display: "flex", flexDirection: "column", minHeight: "100vh", ...s }}>
       {/* Title bar */}
       <div style={{
         background: `linear-gradient(90deg, ${W.titleBar}, #1084d0)`,
         padding: "2px 3px", display: "flex", alignItems: "center", justifyContent: "space-between",
-        marginBottom: 2, userSelect: "none",
+        marginBottom: 2, userSelect: "none", flexShrink: 0,
       }}>
         <span style={{ color: W.titleText, fontSize: 11, fontWeight: 700, letterSpacing: 0 }}>{title}</span>
         <div style={{ display: "flex", gap: 2 }}>
@@ -76,7 +76,7 @@ function Win95Window({ title, children, style: s, statusBar }) {
           ))}
         </div>
       </div>
-      <div>{children}</div>
+      <div style={{ display: "flex", flexDirection: "column", flex: 1 }}>{children}</div>
       {statusBar && (
         <div style={{
           display: "flex", gap: 4, marginTop: 2,
@@ -815,7 +815,7 @@ export default function App() {
 
   return (
     <div style={{
-      background: W.bg, minHeight: "100vh", padding: "8px 8px 36px",
+      background: W.bg, minHeight: "100vh", padding: "0 0 28px",
       fontFamily: "'MS Sans Serif', Tahoma, Geneva, sans-serif", fontSize: 11, color: W.text,
     }}>
       <style>{`
@@ -858,7 +858,7 @@ export default function App() {
         </div>
 
         {/* Content area */}
-        <div style={{ ...sunken, background: W.white, padding: 8, minHeight: "calc(100vh - 140px)" }}>
+        <div style={{ ...sunken, background: W.white, padding: 8, flex: 1 }}>
           {tab === "import" && <ImportTab transactions={txns} setTransactions={setTxns} onSave={doSave} />}
           {tab === "review" && <ReviewTab transactions={txns} setTransactions={setTxns} onSave={doSave} />}
           {tab === "dashboard" && <DashboardTab transactions={txns} />}
