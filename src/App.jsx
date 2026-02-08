@@ -232,14 +232,19 @@ function detectPairs(txns) {
 // ════════════════════════════════════════
 // TAB: IMPORT
 // ════════════════════════════════════════
-function ImportTab({ transactions, setTransactions, onSave }) {
+function ImportTab({ transactions, setTransactions, onSave, setTab }) {
   const [dragOver, setDragOver] = useState(false);
   const [log, setLog] = useState([]);
   const [src, setSrc] = useState("auto");
   const [accName, setAccName] = useState("");
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  const [showHelp, setShowHelp] = useState(false);
   const ref = useRef(null);
 
+  const SRC_LABELS = { boa: "Bank of America", schwab: "Charles Schwab", kraken: "Kraken" };
+
   const handle = useCallback((files) => {
+    let totalFlagged = 0;
     Array.from(files).forEach(file => {
       Papa.parse(file, { header: true, skipEmptyLines: true, complete: (res) => {
         const rows = res.data; if (!rows.length) return;
@@ -253,61 +258,98 @@ function ImportTab({ transactions, setTransactions, onSave }) {
         const all = [...transactions, ...nw]; const pairs = detectPairs(all); const pids = new Set(pairs.flat());
         nw.forEach(t => { if (pids.has(t.id) && !t.isTransfer) { t.isTransfer = true; t.category = "Transfer"; t.status = "flagged"; t.confidence = 0.9; } });
         setTransactions(prev => [...prev, ...nw]);
-        setLog(prev => [...prev, { file: file.name, source: s, account: a, imported: nw.length, skipped: rows.length - nw.length, flagged: nw.filter(t => t.status !== "approved").length, time: new Date().toLocaleTimeString() }]);
+        const flagged = nw.filter(t => t.status !== "approved").length;
+        totalFlagged += flagged;
+        setLog(prev => [...prev, { file: file.name, source: s, sourceLabel: SRC_LABELS[s] || s, account: a, imported: nw.length, skipped: rows.length - nw.length, flagged, time: new Date().toLocaleTimeString() }]);
         onSave();
+        if (totalFlagged > 0 && setTab) setTimeout(() => setTab("review"), 1500);
       }});
     });
-  }, [transactions, setTransactions, src, accName, onSave]);
+  }, [transactions, setTransactions, src, accName, onSave, setTab]);
 
   return (
     <div>
-      <GroupBox label="Source Settings" style={{ marginBottom: 8 }}>
-        <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
-          <div><div style={{ fontSize: 10, marginBottom: 2 }}>Source:</div>
-            <Select95 value={src} onChange={setSrc} options={[{ value: "auto", label: "Auto-Detect" }, { value: "boa", label: "Bank of America" }, { value: "schwab", label: "Charles Schwab" }, { value: "kraken", label: "Kraken" }]} /></div>
-          <div><div style={{ fontSize: 10, marginBottom: 2 }}>Account Name:</div>
-            <Input95 value={accName} onChange={e => setAccName(e.target.value)} placeholder="e.g. BofA Checking" style={{ width: 180 }} /></div>
-        </div>
-      </GroupBox>
-
+      {/* Hero drop zone */}
       <div onDragOver={e => { e.preventDefault(); setDragOver(true); }} onDragLeave={() => setDragOver(false)}
         onDrop={e => { e.preventDefault(); setDragOver(false); handle(e.dataTransfer.files); }}
         onClick={() => ref.current?.click()}
-        style={{ ...sunken, background: dragOver ? "#ffffcc" : W.white, padding: 24, textAlign: "center", cursor: "pointer", marginBottom: 8 }}>
-        <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 4 }}>[  Drop CSV files here  ]</div>
-        <div style={{ fontSize: 11, color: W.disabled }}>or click to browse -- Bank of America, Charles Schwab, Kraken</div>
+        style={{
+          ...sunken, background: dragOver ? "#ffffcc" : W.white, padding: "40px 24px",
+          textAlign: "center", cursor: "pointer", marginBottom: 8,
+          border: dragOver ? `2px dashed ${W.navy}` : undefined,
+        }}>
+        <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 6 }}>[ Drop all your CSV files here ]</div>
+        <div style={{ fontSize: 11, color: W.disabled, marginBottom: 8 }}>or click to browse</div>
+        <div style={{ display: "flex", justifyContent: "center", gap: 12, fontSize: 10, color: W.navy }}>
+          <span style={{ ...raised, padding: "2px 8px", background: W.surface }}>Bank of America</span>
+          <span style={{ ...raised, padding: "2px 8px", background: W.surface }}>Charles Schwab</span>
+          <span style={{ ...raised, padding: "2px 8px", background: W.surface }}>Kraken</span>
+        </div>
+        <div style={{ fontSize: 10, color: W.disabled, marginTop: 8 }}>Drop multiple files at once -- source is auto-detected, duplicates are skipped</div>
         <input ref={ref} type="file" accept=".csv" multiple style={{ display: "none" }} onChange={e => { handle(e.target.files); e.target.value = ""; }} />
       </div>
 
+      {/* Import results */}
       {log.length > 0 && (
-        <GroupBox label="Import Log">
-          <div style={{ ...sunken, background: W.white, padding: 2, maxHeight: 120, overflowY: "auto" }}>
-            {log.map((l, i) => (
-              <div key={i} style={{ fontSize: 10, padding: "2px 4px", background: i % 2 === 0 ? W.white : "#f0f0f0", display: "flex", justifyContent: "space-between" }}>
-                <span>[{l.time}] {l.file} {"->"} {l.account}</span>
-                <span>{l.imported} imported{l.flagged > 0 && <span style={{ color: W.red }}>, {l.flagged} flagged</span>}</span>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: 6, marginBottom: 8 }}>
+          {log.map((l, i) => (
+            <div key={i} style={{ ...raised, padding: 6, background: W.surface }}>
+              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 3 }}>
+                <span style={{ fontSize: 10, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 130 }}>{l.file}</span>
+                <span style={{ fontSize: 9, color: W.disabled }}>{l.time}</span>
+              </div>
+              <div style={{ fontSize: 10, color: W.navy, marginBottom: 2 }}>{l.sourceLabel}</div>
+              <div style={{ fontSize: 10 }}>
+                <span style={{ color: W.green, fontWeight: 700 }}>{l.imported} imported</span>
+                {l.skipped > 0 && <span style={{ color: W.disabled }}> | {l.skipped} skipped</span>}
+                {l.flagged > 0 && <span style={{ color: W.red, fontWeight: 700 }}> | {l.flagged} to review</span>}
+              </div>
+              {l.flagged > 0 && <div style={{ fontSize: 9, color: W.amber, marginTop: 2 }}>Switching to Review tab...</div>}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Advanced settings toggle */}
+      <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
+        <Btn95 onClick={() => setShowAdvanced(!showAdvanced)} style={{ minWidth: 0, fontSize: 10, padding: "2px 8px" }}>
+          {showAdvanced ? "- Advanced" : "+ Advanced"}
+        </Btn95>
+        <Btn95 onClick={() => setShowHelp(!showHelp)} style={{ minWidth: 0, fontSize: 10, padding: "2px 8px" }}>
+          {showHelp ? "- How do I get my CSV files?" : "+ How do I get my CSV files?"}
+        </Btn95>
+      </div>
+
+      {showAdvanced && (
+        <GroupBox label="Source Override" style={{ marginBottom: 8 }}>
+          <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
+            <div><div style={{ fontSize: 10, marginBottom: 2 }}>Source:</div>
+              <Select95 value={src} onChange={setSrc} options={[{ value: "auto", label: "Auto-Detect" }, { value: "boa", label: "Bank of America" }, { value: "schwab", label: "Charles Schwab" }, { value: "kraken", label: "Kraken" }]} /></div>
+            <div><div style={{ fontSize: 10, marginBottom: 2 }}>Account Name:</div>
+              <Input95 value={accName} onChange={e => setAccName(e.target.value)} placeholder="e.g. BofA Checking" style={{ width: 180 }} /></div>
+          </div>
+          <div style={{ fontSize: 9, color: W.disabled, marginTop: 4 }}>Only needed if auto-detection picks the wrong source.</div>
+        </GroupBox>
+      )}
+
+      {showHelp && (
+        <GroupBox label="How to Export CSVs" style={{ marginBottom: 8 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 6 }}>
+            {[
+              { n: "Bank of America", s: ["Log in (desktop web only)", "Select checking/savings account", "Click 'Download' above transactions", "Set date range (max 3,000 txns)", "File type: 'Microsoft Excel Format'", "Click 'Download Transactions'"] },
+              { n: "Charles Schwab", s: ["Log in (desktop web only)", "Accounts > History", "Select account + date range", "Click 'Export' (top-right of table)", "CSV downloads automatically", "Each account exported separately"] },
+              { n: "Kraken", s: ["Log in > Profile > Settings > Documents", "Create Export > select 'Ledger'", "Set date range + CSV format", "Click Generate (may take minutes-days)", "Check back manually (no email alert)", "Download ZIP > extract ledgers.csv"] },
+            ].map(x => (
+              <div key={x.n} style={{ ...sunken, background: W.white, padding: 6 }}>
+                <div style={{ fontWeight: 700, fontSize: 10, marginBottom: 4, textDecoration: "underline" }}>{x.n}</div>
+                <ol style={{ margin: 0, paddingLeft: 14, fontSize: 10, lineHeight: 1.6 }}>
+                  {x.s.map((s, i) => <li key={i}>{s}</li>)}
+                </ol>
               </div>
             ))}
           </div>
         </GroupBox>
       )}
-
-      <GroupBox label="How to Export CSVs" style={{ marginTop: 8 }}>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 6 }}>
-          {[
-            { n: "Bank of America", s: ["Log in (desktop web only)", "Select checking/savings account", "Click 'Download' above transactions", "Set date range (max 3,000 txns)", "File type: 'Microsoft Excel Format'", "Click 'Download Transactions'"] },
-            { n: "Charles Schwab", s: ["Log in (desktop web only)", "Accounts > History", "Select account + date range", "Click 'Export' (top-right of table)", "CSV downloads automatically", "Each account exported separately"] },
-            { n: "Kraken", s: ["Log in > Profile > Settings > Documents", "Create Export > select 'Ledger'", "Set date range + CSV format", "Click Generate (may take minutes-days)", "Check back manually (no email alert)", "Download ZIP > extract ledgers.csv"] },
-          ].map(x => (
-            <div key={x.n} style={{ ...sunken, background: W.white, padding: 6 }}>
-              <div style={{ fontWeight: 700, fontSize: 10, marginBottom: 4, textDecoration: "underline" }}>{x.n}</div>
-              <ol style={{ margin: 0, paddingLeft: 14, fontSize: 10, lineHeight: 1.6 }}>
-                {x.s.map((s, i) => <li key={i}>{s}</li>)}
-              </ol>
-            </div>
-          ))}
-        </div>
-      </GroupBox>
     </div>
   );
 }
@@ -859,7 +901,7 @@ export default function App() {
 
         {/* Content area */}
         <div style={{ ...sunken, background: W.white, padding: 8, flex: 1 }}>
-          {tab === "import" && <ImportTab transactions={txns} setTransactions={setTxns} onSave={doSave} />}
+          {tab === "import" && <ImportTab transactions={txns} setTransactions={setTxns} onSave={doSave} setTab={setTab} />}
           {tab === "review" && <ReviewTab transactions={txns} setTransactions={setTxns} onSave={doSave} />}
           {tab === "dashboard" && <DashboardTab transactions={txns} />}
           {tab === "networth" && <NetWorthTab netWorth={nw} setNetWorth={setNw} onSave={doSave} />}
