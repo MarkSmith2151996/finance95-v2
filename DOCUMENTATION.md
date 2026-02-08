@@ -23,6 +23,10 @@
   - [Net Worth](#net-worth-tab)
   - [Protected Money](#protected-money-tab)
   - [Optimize](#optimize-tab)
+- [CSV Export Guide](#csv-export-guide)
+  - [Bank of America](#bank-of-america)
+  - [Charles Schwab](#charles-schwab)
+  - [Kraken](#kraken)
 - [Storage](#storage)
 - [Deployment](#deployment)
 - [Development](#development)
@@ -368,6 +372,152 @@ This catches transfers that don't have obvious keywords, like moving money betwe
 - **Category savings analysis**: Compares average vs median spending per category
   - "Savings potential" = average - median (if you reduced to your median month, you'd save this much)
 - Summary: number of recurring charges, total annual recurring cost, monthly savings potential
+
+---
+
+## CSV Export Guide
+
+Detailed instructions for exporting your transaction data from each supported platform.
+
+---
+
+### Bank of America
+
+#### Steps
+
+1. **Log in** at [bankofamerica.com](https://www.bankofamerica.com) in a **desktop web browser** (not the mobile app)
+2. From the Accounts overview, click on your **checking or savings account**
+3. In the transaction history view, find the **"Download"** link — it's above the transaction list, near the search/filter tools (small link, easy to miss)
+4. Set your **date range** — choose a preset period or enter custom dates
+5. Under **"File type"**, select **"Microsoft Excel Format"** — this IS the CSV despite the name. It produces a standard comma-delimited file that works in any spreadsheet app or data tool
+6. Click **"Download Transactions"**
+7. The file downloads as something like `stmt.csv` or `currentTransaction.csv`
+
+#### Limitations
+
+- **3,000 transactions max** per download — for high-volume accounts, break into smaller date ranges (e.g., monthly)
+- **Credit card accounts**: limited to last **12 months** of transaction downloads
+- **Checking/savings**: up to **7 years** of statement history available
+- **Desktop web only** — the mobile app does not support CSV export
+
+#### Tips
+
+- There is no separate "CSV" option — "Microsoft Excel Format" IS your CSV
+- Rename files immediately after download (BofA uses generic names like `stmt.csv`)
+- For credit card transactions older than 12 months, you'd need PDF statements
+- Transaction history export is NOT the same as an official bank statement (which is PDF only, under Statements & Documents)
+
+#### Expected CSV Columns
+
+The app looks for these columns (flexible matching):
+- `Date` / `Posted Date`
+- `Description` / `Payee` / `Original Description`
+- `Amount` (single column) or `Debit`/`Withdrawal` + `Credit`/`Deposit` (split columns)
+- `Balance` / `Running Bal`
+
+---
+
+### Charles Schwab
+
+#### Brokerage Account Steps
+
+1. **Log in** at [schwab.com](https://www.schwab.com) in a **desktop web browser**
+2. Navigate to **Accounts > History**
+3. Select your **brokerage account** from the account dropdown
+4. Set your **date range** (custom dates supported)
+5. Optionally filter by transaction type (Buy, Sell, Dividends, etc.)
+6. Click the **"Export"** link/button — top-right area of the transaction table (may appear as a download icon or the word "Export")
+7. CSV file downloads automatically
+
+#### Bank Account Steps (Checking/Savings)
+
+1. Same navigation: **Accounts > History**
+2. Select your **Schwab Bank account** (e.g., High Yield Investor Checking)
+3. Set date range and filters
+4. Click **"Export"** / **"Download"**
+5. Select **CSV** format
+
+#### Limitations
+
+- **Brokerage**: up to ~4 years of transaction history
+- **Bank accounts**: up to ~2 years of history online
+- Each account must be exported **separately** — no bulk "export all" option
+- Pending/unsettled transactions are **not included** in exports
+- **Desktop web only** — the mobile app does not support CSV export
+
+#### Tips
+
+- Schwab CSVs sometimes include **metadata header lines** (account number, date range) before the actual column headers — the app handles this
+- Dividend reinvestments create **two line items** (the dividend + the reinvestment purchase)
+- The standard transaction CSV does NOT include cost basis or gain/loss info
+- If clicking Export does nothing, check your browser's **pop-up blocker** for schwab.com
+- Post-TD Ameritrade merger: the interface has been updated, but Export is in the same general location
+
+#### Expected CSV Columns
+
+**Brokerage:**
+- `Date`, `Action` (Buy/Sell/Reinvest Dividend/Journal/etc.), `Symbol`, `Description`, `Quantity`, `Price`, `Fees & Comm` / `Fees`, `Amount` / `Net Amount`
+
+**Bank:**
+- `Date`, `Type`, `Description`, `Withdrawal`, `Deposit`, `Running Balance`
+
+---
+
+### Kraken
+
+#### Steps
+
+1. **Log in** at [kraken.com](https://www.kraken.com)
+2. Click your **profile icon** (top-right) > **Settings** > **Documents** (or look for "Data Export" / "Manage Data")
+3. In the Exports section, click **"Create Export"**
+4. Select export type: **"Ledger"** (NOT "Trades" — Ledger is more comprehensive)
+5. Set your **date range** — recommend 1 year per export for large histories
+6. Select product: **Spot** (unless you need Futures)
+7. Format: **CSV**
+8. Click **"Generate"** / **"Submit"**
+9. Wait for processing — status changes from "Queued" to "Processed" (can take **minutes to a full week** depending on account size)
+10. **Check back manually** — Kraken does NOT send email notifications
+11. When the download icon is enabled, click to download
+12. The download is a **ZIP file** — extract it to get `ledgers.csv`
+
+#### Limitations
+
+- ~1 year per export recommended — create multiple exports for longer histories
+- Processing can take **minutes to a week** depending on account activity
+- Exports expire after **14 days** — download promptly
+- No email notification when ready — must check the Documents page manually
+- If the export is empty, you likely selected dates with no activity
+
+#### Tips
+
+- **Kraken uses non-standard asset codes**: `XXBT` = BTC, `XBT` = BTC, `XETH` = ETH, `ZUSD` = USD, `ZEUR` = EUR, etc. — the app translates these automatically
+- All timestamps are **UTC** — transactions near midnight may fall on a different date than expected in your timezone
+- A single trade creates **two ledger rows** (one debit, one credit) sharing the same `refid`
+- **Don't let Excel round values** — crypto amounts can have 8+ decimal places
+- Staking rewards are included but do NOT include market price at time of receipt
+- The download is always a ZIP, never a raw CSV
+
+#### Ledger vs. Trades Export
+
+| | Ledger (use this) | Trades |
+|---|---|---|
+| **Records** | Every balance change | Only executed orders |
+| **Includes** | Deposits, withdrawals, trades, staking, transfers, fees | Buy/sell executions only |
+| **Best for** | Full history, tax reporting, this app | Trade performance analysis |
+
+#### Expected CSV Columns
+
+- `txid` — Unique transaction ID
+- `refid` — Reference ID (links related entries, e.g., both sides of a trade)
+- `time` — Timestamp (UTC)
+- `type` — `deposit`, `withdrawal`, `trade`, `staking`, `transfer`, `spend`, `receive`, etc.
+- `subtype` — More specific classification
+- `aclass` — Asset class
+- `asset` — Asset code (Kraken internal format)
+- `wallet` — Which wallet
+- `amount` — Amount credited (+) or debited (-)
+- `fee` — Fee charged
+- `balance` — Running balance of that asset
 
 ---
 

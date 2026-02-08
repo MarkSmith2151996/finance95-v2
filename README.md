@@ -35,11 +35,15 @@ Works with Vercel out of the box — connect the repo and it auto-deploys.
 
 ## How to Get Your CSVs
 
-**Bank of America** — Log in > Select account > Click "Download" > Set date range > Select CSV > Download
+See [DOCUMENTATION.md — CSV Export Guide](DOCUMENTATION.md#csv-export-guide) for full step-by-step instructions with tips and gotchas for each platform.
 
-**Charles Schwab** — Log in > Accounts > History > Select account & range > Click "Export" > CSV
+**Quick version:**
 
-**Kraken** — Log in > Profile > Documents > Create Export > Ledgers > CSV > Generate > Download
+- **Bank of America** — Log in > Select account > Click "Download" above transaction list > Set date range > Select "Microsoft Excel Format" (this is the CSV) > Download. Max 3,000 transactions per export. Desktop web only.
+
+- **Charles Schwab** — Log in > Accounts > History > Select account & date range > Click "Export" (top-right of table) > CSV downloads automatically. Brokerage: up to 4 years. Bank: up to 2 years. Desktop web only.
+
+- **Kraken** — Log in > Profile icon > Settings > Documents > Create Export > Select "Ledger" + date range + CSV > Generate > Wait for processing (minutes to days) > Download ZIP > Extract `ledgers.csv`. No email notification — check back manually.
 
 ## Tech Stack
 

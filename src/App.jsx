@@ -295,9 +295,9 @@ function ImportTab({ transactions, setTransactions, onSave }) {
       <GroupBox label="How to Export CSVs" style={{ marginTop: 8 }}>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 6 }}>
           {[
-            { n: "Bank of America", s: ["Log in > Select account", "Click 'Download'", "Choose date range", "Select CSV format", "Download"] },
-            { n: "Charles Schwab", s: ["Log in > Accounts > History", "Select account & range", "Click 'Export' top-right", "Choose CSV format", "Download"] },
-            { n: "Kraken", s: ["Log in > Profile > Documents", "Click 'Create Export'", "Select Ledgers + range", "Choose CSV > Generate", "Download"] },
+            { n: "Bank of America", s: ["Log in (desktop web only)", "Select checking/savings account", "Click 'Download' above transactions", "Set date range (max 3,000 txns)", "File type: 'Microsoft Excel Format'", "Click 'Download Transactions'"] },
+            { n: "Charles Schwab", s: ["Log in (desktop web only)", "Accounts > History", "Select account + date range", "Click 'Export' (top-right of table)", "CSV downloads automatically", "Each account exported separately"] },
+            { n: "Kraken", s: ["Log in > Profile > Settings > Documents", "Create Export > select 'Ledger'", "Set date range + CSV format", "Click Generate (may take minutes-days)", "Check back manually (no email alert)", "Download ZIP > extract ledgers.csv"] },
           ].map(x => (
             <div key={x.n} style={{ ...sunken, background: W.white, padding: 6 }}>
               <div style={{ fontWeight: 700, fontSize: 10, marginBottom: 4, textDecoration: "underline" }}>{x.n}</div>
