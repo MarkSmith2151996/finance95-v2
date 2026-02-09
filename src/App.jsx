@@ -266,6 +266,9 @@ function ImportTab({ transactions, setTransactions, onSave, setTab }) {
     const nw = parsed.filter(t => !existing.has(`${t.date}|${t.description}|${t.amount}`));
     const all = [...transactions, ...nw]; const pairs = detectPairs(all); const pids = new Set(pairs.flat());
     nw.forEach(t => { if (pids.has(t.id) && !t.isTransfer) { t.isTransfer = true; t.category = "Transfer"; t.status = "flagged"; t.confidence = 0.9; } });
+    // Apply learned rules from past user categorizations
+    const rules = loadRules();
+    nw.forEach(t => { const key = merchantKey(t.description); const rule = rules[key]; if (rule && t.confidence < 0.8) { t.category = rule.category; t.isTransfer = rule.isTransfer; t.confidence = 0.85; t.status = "approved"; t.reviewed = true; } });
     setTransactions(prev => [...prev, ...nw]);
     const flagged = nw.filter(t => t.status !== "approved").length;
     setLog(prev => [...prev, { file: fileName, source: s, sourceLabel: SRC_LABELS[s] || s, account: a, imported: nw.length, skipped: rows.length - nw.length, flagged, time: new Date().toLocaleTimeString() }]);
@@ -372,12 +375,48 @@ function ImportTab({ transactions, setTransactions, onSave, setTab }) {
 }
 
 // ════════════════════════════════════════
+// MERCHANT KEY — normalize descriptions for smart matching
+// Strips dates, card numbers, locations, purchase method to find the merchant name
+// ════════════════════════════════════════
+function merchantKey(desc) {
+  return (desc || "").toLowerCase()
+    .replace(/\d{2}\/\d{2}/g, "")               // strip MM/DD dates
+    .replace(/#\w+/g, "")                        // strip #XXXXX card/ref numbers
+    .replace(/xxxxx\w*/gi, "")                   // strip masked numbers
+    .replace(/\bpurchase\b/g, "")                // strip PURCHASE
+    .replace(/\bmobile\b/g, "")                  // strip MOBILE
+    .replace(/\bpmnt (rcvd|sent)\b/g, "")        // strip PMNT RCVD/SENT
+    .replace(/\b(deposit|withdrwl|refund)\b/g, "")
+    .replace(/\b[a-z]{2}\s*$/g, "")              // strip trailing state code (MI, CA, OH)
+    .replace(/\b\d{5}\b/g, "")                   // strip zip codes
+    .replace(/\b(des|id|indn|co|ppd|ccd|web)\b:?\s*/gi, "") // strip ACH metadata tags
+    .replace(/[^a-z*&.' ]/g, " ")                // keep letters and common merchant chars
+    .replace(/\s+/g, " ").trim()
+    .slice(0, 30);                                // cap length for matching
+}
+
+// ════════════════════════════════════════
+// LEARNED RULES — persist user categorizations
+// ════════════════════════════════════════
+const RULES_KEY = "finance95_rules";
+function loadRules() { try { const r = localStorage.getItem(RULES_KEY); return r ? JSON.parse(r) : {}; } catch { return {}; } }
+function saveRules(r) { try { localStorage.setItem(RULES_KEY, JSON.stringify(r)); } catch {} }
+
+// ════════════════════════════════════════
 // TAB: REVIEW
 // ════════════════════════════════════════
 function ReviewTab({ transactions, setTransactions, onSave }) {
   const [filter, setFilter] = useState("pending");
   const [srcF, setSrcF] = useState("all");
   const [search, setSearch] = useState("");
+  const [toast, setToast] = useState(null);
+  const toastTimer = useRef(null);
+
+  const showToast = (msg) => {
+    setToast(msg);
+    if (toastTimer.current) clearTimeout(toastTimer.current);
+    toastTimer.current = setTimeout(() => setToast(null), 3000);
+  };
 
   const filtered = useMemo(() => {
     return transactions.filter(t => {
@@ -390,12 +429,46 @@ function ReviewTab({ transactions, setTransactions, onSave }) {
     }).sort((a, b) => { if (a.status === "flagged" && b.status !== "flagged") return -1; if (b.status === "flagged" && a.status !== "flagged") return 1; return b.date.localeCompare(a.date); });
   }, [transactions, filter, srcF, search]);
 
+  // Smart update: apply category to all transactions with the same merchant key
+  const smartUpd = (id, newCat, isXfer) => {
+    const txn = transactions.find(t => t.id === id);
+    if (!txn) return;
+    const key = merchantKey(txn.description);
+    if (!key || key.length < 3) {
+      // Key too short/generic, just update this one
+      setTransactions(prev => prev.map(t => t.id === id ? { ...t, category: newCat, isTransfer: isXfer, reviewed: true, status: "approved" } : t));
+      onSave();
+      return;
+    }
+    // Find all transactions with matching merchant key
+    let matched = 0;
+    setTransactions(prev => prev.map(t => {
+      if (t.id === id) { matched++; return { ...t, category: newCat, isTransfer: isXfer, reviewed: true, status: "approved" }; }
+      if (merchantKey(t.description) === key && t.category !== newCat) { matched++; return { ...t, category: newCat, isTransfer: isXfer, reviewed: true, status: "approved" }; }
+      return t;
+    }));
+    // Save learned rule for future imports
+    const rules = loadRules(); rules[key] = { category: newCat, isTransfer: isXfer }; saveRules(rules);
+    onSave();
+    if (matched > 1) showToast(`Updated ${matched} "${key}" transactions -> ${newCat}`);
+  };
+
   const upd = (id, u) => { setTransactions(prev => prev.map(t => t.id === id ? { ...t, ...u, reviewed: true } : t)); onSave(); };
   const bulkApprove = () => { const ids = new Set(filtered.map(f => f.id)); setTransactions(prev => prev.map(t => ids.has(t.id) ? { ...t, status: "approved", reviewed: true } : t)); onSave(); };
   const pending = transactions.filter(t => t.status !== "approved").length;
 
   return (
     <div>
+      {/* Toast notification */}
+      {toast && (
+        <div style={{
+          ...raised, background: "#ffffcc", padding: "4px 10px", marginBottom: 6,
+          fontSize: 10, display: "flex", justifyContent: "space-between", alignItems: "center",
+        }}>
+          <span>{toast}</span>
+          <Btn95 onClick={() => setToast(null)} style={{ minWidth: 0, padding: "0 4px", fontSize: 9 }}>x</Btn95>
+        </div>
+      )}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
         <div style={{ fontSize: 11 }}>{pending > 0 ? <span style={{ color: W.red }}>! {pending} transactions need review</span> : <span style={{ color: W.green }}>All transactions reviewed.</span>}</div>
         <Btn95 onClick={bulkApprove}>Approve All ({filtered.length})</Btn95>
@@ -428,10 +501,13 @@ function ReviewTab({ transactions, setTransactions, onSave }) {
                 </td>
                 <td style={{ padding: "2px 5px", textAlign: "right", fontFamily: "monospace", fontWeight: 700, color: t.amount > 0 ? W.green : W.red }}>{fmt(t.amount)}</td>
                 <td style={{ padding: "2px 5px" }}>
-                  <Select95 value={t.category} onChange={v => upd(t.id, { category: v, isTransfer: v === "Transfer" })} options={CATEGORIES} style={{ width: 100, fontSize: 10 }} />
+                  <Select95 value={t.category} onChange={v => smartUpd(t.id, v, v === "Transfer")} options={CATEGORIES} style={{ width: 100, fontSize: 10 }} />
                 </td>
                 <td style={{ padding: "2px 5px", textAlign: "center" }}>
-                  <Check95 checked={t.isTransfer} onChange={e => upd(t.id, { isTransfer: e.target.checked, category: e.target.checked ? "Transfer" : t.category })} />
+                  <Check95 checked={t.isTransfer} onChange={e => {
+                    const isX = e.target.checked;
+                    smartUpd(t.id, isX ? "Transfer" : t.category, isX);
+                  }} />
                 </td>
                 <td style={{ padding: "2px 5px", textAlign: "center" }}>
                   {t.status === "approved"

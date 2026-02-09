@@ -246,6 +246,17 @@ The `classify(description, amount)` function categorizes transactions using keyw
 
 6. **Fallback** — `Uncategorized` (confidence: 0.10)
 
+### Learned Rules (Post-Classification)
+
+After the keyword pipeline runs, the import process checks each transaction against **learned rules** stored in `localStorage` under key `"finance95_rules"`. If a transaction's `merchantKey()` matches a saved rule and its confidence is below 0.80:
+
+- Category is overridden with the learned value
+- `isTransfer` flag is set from the rule
+- Confidence is boosted to 0.85 (auto-approved)
+- Transaction skips the review queue
+
+Rules are created automatically whenever a user changes a category in the Review tab. The `merchantKey()` function normalizes descriptions (strips dates, card numbers, purchase method, location codes, ACH metadata) so the same merchant matches regardless of transaction-specific details.
+
 ### Confidence Threshold
 
 - Transactions with confidence >= 0.80 are auto-approved
@@ -321,9 +332,12 @@ This catches transfers that don't have obvious keywords, like moving money betwe
 - Source filter (BofA, Schwab, Kraken)
 - Text search on descriptions
 - Per-transaction controls:
-  - Category dropdown (19 options)
-  - Transfer checkbox
+  - Category dropdown (19 options) — **smart: applies to all matching merchants**
+  - Transfer checkbox — **smart: applies to all matching merchants**
   - Approve button
+- **Smart categorization**: When you change the category on one transaction, the app extracts a "merchant key" (e.g., `"CTLP*SUPER VENDO 09/24 MOBILE PURCHASE FARMINGTON MI"` → `"ctlp*super vendo"`) and applies the same category to ALL transactions from that merchant. Shows a toast notification with how many were updated.
+- **Learned rules**: User categorizations are saved to `localStorage` under key `"finance95_rules"`. On future imports, any transaction matching a known merchant key is auto-categorized and auto-approved (skips the review queue).
+- **Merchant key extraction** (`merchantKey()`): Strips dates, card numbers, purchase method, location, ACH metadata, and state codes from descriptions to isolate the merchant name. This allows matching across different dates and locations.
 - **Bulk approve** for all visible transactions
 - Flagged rows highlighted in yellow, transfers in light blue
 - Capped at 100 visible rows for performance
@@ -528,11 +542,17 @@ All data persists in the browser via `localStorage` under the key `"finance95"`.
 ### Stored Object Shape
 
 ```js
+// Main data — key: "finance95"
 {
   txns: Transaction[],    // All imported transactions
   nw: NetWorthEntry[],    // Net worth assets & liabilities
   pf: ProtectedFund[],    // Protected money / savings funds
   bud: { [category]: number }  // Monthly budget amounts
+}
+
+// Learned categorization rules — key: "finance95_rules"
+{
+  [merchantKey: string]: { category: string, isTransfer: boolean }
 }
 ```
 
@@ -540,6 +560,7 @@ All data persists in the browser via `localStorage` under the key `"finance95"`.
 
 - **Debounced** — saves 600ms after the last state change
 - **Auto-save** — triggers on any change to transactions, net worth, protected funds, or budgets
+- **Learned rules** — saved immediately when a category is changed in the Review tab (separate `localStorage` key)
 - **Data never leaves the browser** — no external API calls, no telemetry
 
 ### Reset
