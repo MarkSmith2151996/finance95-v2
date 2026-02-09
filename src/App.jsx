@@ -209,7 +209,7 @@ function classify(desc, amount) {
 // ════════════════════════════════════════
 function findCol(row, ...cs) { for (const k of Object.keys(row)) { const kl = k.toLowerCase().replace(/[^a-z0-9 ]/g, "").trim(); for (const c of cs) if (kl.includes(c)) return row[k]; } return null; }
 function parseAmt(v) { if (!v || String(v).trim() === "" || v === "--" || v === "N/A") return null; const c = String(v).replace(/[$,]/g, "").replace("(", "-").replace(")", "").trim(); const n = parseFloat(c); return isNaN(n) ? null : n; }
-function parseDt(v) { if (!v) return null; const s = String(v).replace("as of ", "").trim(); let m; if ((m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/))) return `${m[3]}-${m[1].padStart(2,"0")}-${m[2].padStart(2,"0")}`; if ((m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2})$/))) return `20${m[3]}-${m[1].padStart(2,"0")}-${m[2].padStart(2,"0")}`; if ((m = s.match(/^(\d{4})-(\d{2})-(\d{2})/))) return `${m[1]}-${m[2]}-${m[3]}`; return null; }
+function parseDt(v) { if (!v) return null; const s = String(v).replace(/\s*as of .*/, "").trim(); let m; if ((m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/))) return `${m[3]}-${m[1].padStart(2,"0")}-${m[2].padStart(2,"0")}`; if ((m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2})$/))) return `20${m[3]}-${m[1].padStart(2,"0")}-${m[2].padStart(2,"0")}`; if ((m = s.match(/^(\d{4})-(\d{2})-(\d{2})/))) return `${m[1]}-${m[2]}-${m[3]}`; return null; }
 
 const KA = { XXBT:"BTC",XBT:"BTC",XETH:"ETH",XLTC:"LTC",XXRP:"XRP",XADA:"ADA",XDOT:"DOT",XXLM:"XLM",ZUSD:"USD",ZEUR:"EUR",ZGBP:"GBP",ZCAD:"CAD",ZJPY:"JPY" };
 
@@ -243,29 +243,46 @@ function ImportTab({ transactions, setTransactions, onSave, setTab }) {
 
   const SRC_LABELS = { boa: "Bank of America", schwab: "Charles Schwab", kraken: "Kraken" };
 
+  const processCSV = useCallback((text, fileName) => {
+    // BofA CSVs have a summary section before the real headers.
+    // Look for the actual header row and strip everything before it.
+    const lines = text.split(/\r?\n/);
+    let csvText = text;
+    for (let i = 0; i < Math.min(lines.length, 15); i++) {
+      const ll = lines[i].toLowerCase().replace(/"/g, "");
+      if (ll.startsWith("date,") && (ll.includes("description") || ll.includes("action"))) {
+        csvText = lines.slice(i).join("\n");
+        break;
+      }
+    }
+    const res = Papa.parse(csvText, { header: true, skipEmptyLines: true });
+    const rows = res.data; if (!rows.length) return;
+    const h = Object.keys(rows[0]).join(" ").toLowerCase();
+    let s = src, a = accName;
+    if (s === "auto") { if (h.includes("running bal") || (h.includes("date") && h.includes("description") && h.includes("amount") && !h.includes("action") && !h.includes("symbol"))) s = "boa"; else if (h.includes("action") || h.includes("symbol") || h.includes("fees")) s = "schwab"; else if (h.includes("txid") || h.includes("refid") || h.includes("asset")) s = "kraken"; else s = "boa"; }
+    if (!a) a = s === "boa" ? "BofA Account" : s === "schwab" ? "Schwab Brokerage" : "Kraken";
+    let parsed = s === "boa" ? parseBofA(rows, a) : s === "schwab" ? parseSchwab(rows, a) : parseKraken(rows, a);
+    const existing = new Set(transactions.map(t => `${t.date}|${t.description}|${t.amount}`));
+    const nw = parsed.filter(t => !existing.has(`${t.date}|${t.description}|${t.amount}`));
+    const all = [...transactions, ...nw]; const pairs = detectPairs(all); const pids = new Set(pairs.flat());
+    nw.forEach(t => { if (pids.has(t.id) && !t.isTransfer) { t.isTransfer = true; t.category = "Transfer"; t.status = "flagged"; t.confidence = 0.9; } });
+    setTransactions(prev => [...prev, ...nw]);
+    const flagged = nw.filter(t => t.status !== "approved").length;
+    setLog(prev => [...prev, { file: fileName, source: s, sourceLabel: SRC_LABELS[s] || s, account: a, imported: nw.length, skipped: rows.length - nw.length, flagged, time: new Date().toLocaleTimeString() }]);
+    onSave();
+    return flagged;
+  }, [transactions, setTransactions, src, accName, onSave]);
+
   const handle = useCallback((files) => {
-    let totalFlagged = 0;
     Array.from(files).forEach(file => {
-      Papa.parse(file, { header: true, skipEmptyLines: true, complete: (res) => {
-        const rows = res.data; if (!rows.length) return;
-        const h = Object.keys(rows[0]).join(" ").toLowerCase();
-        let s = src, a = accName;
-        if (s === "auto") { if (h.includes("running bal") || (h.includes("date") && h.includes("description") && h.includes("amount") && !h.includes("action") && !h.includes("symbol"))) s = "boa"; else if (h.includes("action") || h.includes("symbol") || h.includes("fees")) s = "schwab"; else if (h.includes("txid") || h.includes("refid") || h.includes("asset")) s = "kraken"; else s = "boa"; }
-        if (!a) a = s === "boa" ? "BofA Account" : s === "schwab" ? "Schwab Brokerage" : "Kraken";
-        let parsed = s === "boa" ? parseBofA(rows, a) : s === "schwab" ? parseSchwab(rows, a) : parseKraken(rows, a);
-        const existing = new Set(transactions.map(t => `${t.date}|${t.description}|${t.amount}`));
-        const nw = parsed.filter(t => !existing.has(`${t.date}|${t.description}|${t.amount}`));
-        const all = [...transactions, ...nw]; const pairs = detectPairs(all); const pids = new Set(pairs.flat());
-        nw.forEach(t => { if (pids.has(t.id) && !t.isTransfer) { t.isTransfer = true; t.category = "Transfer"; t.status = "flagged"; t.confidence = 0.9; } });
-        setTransactions(prev => [...prev, ...nw]);
-        const flagged = nw.filter(t => t.status !== "approved").length;
-        totalFlagged += flagged;
-        setLog(prev => [...prev, { file: file.name, source: s, sourceLabel: SRC_LABELS[s] || s, account: a, imported: nw.length, skipped: rows.length - nw.length, flagged, time: new Date().toLocaleTimeString() }]);
-        onSave();
-        if (totalFlagged > 0 && setTab) setTimeout(() => setTab("review"), 1500);
-      }});
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const flagged = processCSV(e.target.result, file.name);
+        if (flagged > 0 && setTab) setTimeout(() => setTab("review"), 1500);
+      };
+      reader.readAsText(file);
     });
-  }, [transactions, setTransactions, src, accName, onSave, setTab]);
+  }, [processCSV, setTab]);
 
   return (
     <div>
