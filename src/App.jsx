@@ -529,7 +529,8 @@ function ReviewTab({ transactions, setTransactions, onSave }) {
 // TAB: DASHBOARD
 // ════════════════════════════════════════
 function DashboardTab({ transactions }) {
-  const real = useMemo(() => transactions.filter(t => !t.isTransfer && t.status === "approved"), [transactions]);
+  const EXCLUDE_CATS = ["Transfer", "Investments", "Crypto"];
+  const real = useMemo(() => transactions.filter(t => !t.isTransfer && t.status === "approved" && !EXCLUDE_CATS.includes(t.category)), [transactions]);
   const inc = useMemo(() => real.filter(t => t.category === "Income" || (t.amount > 0 && t.category !== "Transfer")), [real]);
   const exp = useMemo(() => real.filter(t => t.amount < 0 && t.category !== "Income"), [real]);
   const tInc = inc.reduce((s, t) => s + t.amount, 0);
@@ -701,7 +702,7 @@ function ProtectedTab({ protectedFunds, setProtectedFunds, transactions, onSave 
   const rm = id => { setProtectedFunds(p => p.filter(f => f.id !== id)); onSave(); };
 
   const moExp = useMemo(() => {
-    const a = transactions.filter(t => !t.isTransfer && t.status === "approved" && t.amount < 0);
+    const a = transactions.filter(t => !t.isTransfer && t.status === "approved" && t.amount < 0 && !["Transfer","Investments","Crypto"].includes(t.category));
     if (!a.length) return 0;
     const ms = new Set(a.map(t => t.date.slice(0, 7)));
     return Math.abs(a.reduce((s, t) => s + t.amount, 0)) / (ms.size || 1);
@@ -791,7 +792,7 @@ function ProtectedTab({ protectedFunds, setProtectedFunds, transactions, onSave 
 // TAB: OPTIMIZE
 // ════════════════════════════════════════
 function OptimizeTab({ transactions }) {
-  const exp = useMemo(() => transactions.filter(t => !t.isTransfer && t.status === "approved" && t.amount < 0), [transactions]);
+  const exp = useMemo(() => transactions.filter(t => !t.isTransfer && t.status === "approved" && t.amount < 0 && !["Transfer","Investments","Crypto"].includes(t.category)), [transactions]);
 
   const subs = useMemo(() => {
     const m = {}; exp.forEach(t => { const k = t.description.replace(/[#0-9]/g, "").trim().slice(0, 30); if (!m[k]) m[k] = []; m[k].push(t); });
@@ -854,7 +855,7 @@ function OptimizeTab({ transactions }) {
 function BudgetTab({ transactions, budgets, setBudgets, onSave }) {
   const [editCat, setEditCat] = useState(null);
   const [editVal, setEditVal] = useState("");
-  const exp = useMemo(() => transactions.filter(t => !t.isTransfer && t.status === "approved" && t.amount < 0), [transactions]);
+  const exp = useMemo(() => transactions.filter(t => !t.isTransfer && t.status === "approved" && t.amount < 0 && !["Transfer","Investments","Crypto"].includes(t.category)), [transactions]);
   const curMo = new Date().toISOString().slice(0, 7);
   const curSpend = useMemo(() => { const m = {}; exp.filter(t => t.date.startsWith(curMo)).forEach(t => { if (!m[t.category]) m[t.category] = 0; m[t.category] += Math.abs(t.amount); }); return m; }, [exp, curMo]);
   const avgSpend = useMemo(() => { const ms = {}; exp.forEach(t => { const mo = t.date.slice(0, 7); if (!ms[mo]) ms[mo] = {}; if (!ms[mo][t.category]) ms[mo][t.category] = 0; ms[mo][t.category] += Math.abs(t.amount); }); const ct = {}; const mc = Object.keys(ms).length || 1; Object.values(ms).forEach(m => Object.entries(m).forEach(([c, v]) => { ct[c] = (ct[c] || 0) + v; })); return Object.fromEntries(Object.entries(ct).map(([c, t]) => [c, t / mc])); }, [exp]);
